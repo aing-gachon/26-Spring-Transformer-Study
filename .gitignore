@@ -1,0 +1,46 @@
+# OS / editor files
+.DS_Store
+._*
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python / Jupyter caches and local environments
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.coverage
+htmlcov/
+
+# Local credentials (keep shareable templates)
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Downloaded data, model checkpoints, and experiment outputs
+league_data/
+local_runs/
+transformer_league_runs*/
+optimizer_benchmark_runs/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+submission_*.zip
+
+# Author-only checks and measurements, not participant study materials
+/tests/
+/Week3/validation/
+/Week3/VALIDATION.md
+/Week3/OPTIMIZER_BENCHMARK.md
+
+# Keep Week1/Week2/Week3 study notebooks, answers, documentation,
+# and Week3/evaluate_submission.py available for publication.
