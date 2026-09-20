@@ -1,277 +1,137 @@
-# Aing_리그전 Transformer Fine-tune Explain
+# A.ing 리그전 — Transformer 구조 비교
 
-## 리그전 목적
-- 목표: 고정된 pre-train Transformer 모델을 **IWSLT 2017 (de→en)** 데이터에 fine-tuning하여 번역 성능을 높입니다.
-- 리그전 방식: 참가자는 마지막 실험 설정 셀에서 **`LEAGUE_MODE`와 `FT_HP`만 수정**합니다.
-- 최종 점수: `LEAGUE_MODE = "final"`로 실행했을 때 출력되는 **IWSLT test BLEU**입니다.
+Colab **NVIDIA T4**에서 같은 데이터와 공통 학습 규칙으로 Transformer 구조와 학습 하이퍼파라미터 조합을 비교합니다. 제한된 파라미터를 폭·깊이·Encoder/Decoder·FFN에 어떻게 배분하는지 실험합니다. 최종 점수는 **최고 validation checkpoint의 test BLEU**입니다.
 
-이 리그전의 핵심은 같은 pre-train 모델에서 시작해, fine-tuning 하이퍼파라미터를 어떻게 설정하느냐를 비교하는 것입니다.
+[리그전 노트북](Aing_리그전_Transformer_Finetune.ipynb)은 ResNet처럼 **규칙 → STEP1~7 → 학습 곡선 → test 예시**로 구성했습니다. 기존 링크를 유지하기 위해 파일명을 보존했으며, 내용은 사전학습 없이 처음부터 학습하는 구조 비교입니다.
 
----
+## 공통 규칙
 
-## 전체 실행 흐름
+| 항목 | 설정 |
+| --- | --- |
+| 환경 / seed | Colab T4 / **42 고정** |
+| 데이터 | Multi30k de→en, train 16,000 / validation 1,014 |
+| Tokenizer / 길이 | train으로만 학습한 joint ByteLevel BPE 8,000 / 최대 96토큰 |
+| 모델 상한 | **학습 파라미터 800만 이하** |
+| Quick / Full | 첫 500 updates / **최대 4,000 updates** |
+| Batch | micro 16 × accumulation 4 = 64 |
+| Optimizer 공통 세부값 | Adam/AdamW의 betas=(0.9,0.98), eps=1e-9 |
+| Scheduler | warmup 100 → 최대 4,000 updates 기준 cosine |
+| Label smoothing / gradient clipping | 0.1 / 1.0 |
+| 평가 | 매 **500 updates** 전체 validation BLEU |
+| Early stopping | 최소 **1,500 updates 이후**, **3회 연속 0.1점 초과 개선 없음** |
+| 모델 선택 / 최종 점수 | 최고 validation BLEU checkpoint / test BLEU |
 
-1. STEP1~STEP8: 라이브러리, 데이터, tokenizer, 모델, 평가 함수 준비
-2. STEP9: Multi30k로 fixed pre-train 1회 실행
-3. STEP10~STEP11: IWSLT fine-tuning 데이터 준비
-4. STEP12-A: 참가자가 `LEAGUE_MODE`와 `FT_HP` 수정
-5. STEP12-B: fine-tuning 실행 및 validation/test BLEU 확인
+참가자는 seed를 바꾸거나 여러 seed의 평균을 제출하지 않습니다. 모든 실험은 **seed 42**로 비교합니다. test는 checkpoint 선택이나 early stopping에 사용하지 않습니다.
 
-반복 실험할 때는 **STEP12-A와 STEP12-B만 다시 실행**합니다.
+## 실행 순서
 
----
+1. **STEP1 — 환경 확인:** tokenizer·평가기 버전 설치와 import
+2. **STEP2 — 공통 규칙:** 고정 seed·학습 예산·T4 확인
+3. **STEP3 — 데이터:** 고정 split과 tokenizer 준비
+4. **STEP4 — 모델:** Encoder–Decoder 구현과 파라미터·mask·메모리 검사 함수
+5. **STEP5 — 튜닝 설정:** `ARCH`·`TRAIN_HP`와 실행 방식 선택
+6. **STEP6 — 학습/평가:** 공통 함수 정의
+7. **STEP7 — 실행/점수:** 검사·학습·최고 모델의 valid/test 점수 표시·제출
+8. **추가 자료:** 학습 곡선과 test 번역 예시
 
-## 중요한 실행 구조
+처음에는 위에서부터 모두 실행합니다. 함수 정의 셀은 접혀 있으므로 필요하면 펼쳐 읽을 수 있습니다. 이후 구조 실험은 **STEP5 → STEP7**을 다시 실행하면 됩니다.
 
-노트북 마지막 구간은 두 셀로 나뉩니다.
+VS Code에서는 공식 Colab 확장의 **Select Kernel → Colab → GPU → T4**로 연결합니다. STEP2 출력에서 T4인지 확인하세요. 토크나이저는 `tokenizers==0.22.2`, 평가기는 `sacrebleu==2.6.0`입니다. PyTorch/CUDA 실제 버전은 결과에 기록하며, 재개 시 기존 환경과 일치해야 합니다.
 
-### 1) 실험 설정 셀
-
-참가자가 수정하는 셀입니다.
+## STEP5에서 한 번에 튜닝하기
 
 ```python
-LEAGUE_MODE = "public_fast"  # "public_fast" / "public_full" / "final"
-
-FT_HP = dict(
-    learning_rate=1e-4,
-    lr_scheduler_type="linear",
-    warmup_steps=50,
-    weight_decay=0.0,
-    label_smoothing_factor=0.10,
+ARCH = dict(
+    d_model=256,
+    encoder_layers=3,
+    decoder_layers=3,
+    num_heads=4,
+    ffn_ratio=4,
+    norm_first=False,
 )
-```
-
-### 2) Fine-tune 실행 셀
-
-바로 아래 실행 셀은 설정한 `LEAGUE_MODE`와 `FT_HP`로 fine-tuning을 실행합니다.
-
-- `FT_HP`만 바꾼 경우: 실험 설정 셀 + fine-tune 실행 셀만 다시 실행
-- `LEAGUE_MODE`를 바꾼 경우: 실험 설정 셀 + fine-tune 실행 셀만 다시 실행
-- Stage A pre-train 셀은 다시 실행하지 않음
-
----
-
-## LEAGUE_MODE 사용법과 예상 시간
-
-```python
-LEAGUE_MODE = "public_fast"  # "public_fast" / "public_full" / "final"
-```
-
-| 모드 | 사용 상황 | 평가 방식 | fine-tuning 실행 셀 재실행 기준 예상 시간 |
-|---|---|---|---:|
-| `public_fast` | 여러 조합을 빠르게 비교할 때 | validation 일부 | 약 3분 |
-| `public_full` | 좋은 후보를 전체 validation으로 확인할 때 | validation 전체 | 약 8분 |
-| `final` | 최종 test BLEU를 계산할 때 | test 전체 | 약 20분 |
-
-권장 흐름:
-
-```text
-public_fast로 여러 조합 탐색
-→ public_full로 상위 후보 확인
-→ final로 최종 test BLEU 계산
-```
-
-`public_full`과 `final`은 fine-tuning 설정은 비슷하지만 평가 데이터가 다릅니다. `public_full`은 validation 기준이고, `final`은 test 기준입니다.
-
----
-
-## 점수 기준
-
-### validation 점수
-
-`public_fast`, `public_full`에서 확인하는 참고 점수입니다.
-
-```python
-LEAGUE_VALID_SCORE_IWSLT_VALID_BLEU
-```
-
-### final 점수
-
-`final` 모드에서 직접 계산하는 최종 점수입니다.
-
-```python
-LEAGUE_FINAL_SCORE_IWSLT_TEST_BLEU
-```
-
-리그전 최종 순위는 `LEAGUE_FINAL_SCORE_IWSLT_TEST_BLEU` 기준으로 결정합니다.
-
----
-
-## 튜닝 허용 범위
-
-이번 리그전에서 바꿀 수 있는 값은 **`FT_HP` 안의 5개 값**입니다.
-
-```python
-FT_HP = dict(
-    learning_rate=1e-4,            # 1e-5 ~ 5e-4
-    lr_scheduler_type="linear",    # linear / cosine / inverse_sqrt
-    warmup_steps=50,               # 0 ~ 300
-    weight_decay=0.0,              # 0.0 ~ 0.1
-    label_smoothing_factor=0.10,   # 0.0 ~ 0.20
+TRAIN_HP = dict(
+    optimizer="AdamW",
+    learning_rate=1e-3,
+    weight_decay=0.01,
+    dropout=0.1,
 )
+LEAGUE_MODE = "quick"  # 첫 500 updates 확인 후 "full"로 변경
+RESUME = True
 ```
 
-### 바꿀 수 있는 값
-- `learning_rate`
-- `lr_scheduler_type`
-- `warmup_steps`
-- `weight_decay`
-- `label_smoothing_factor`
+| 설정 | 허용값 | 비교할 내용 |
+| --- | --- | --- |
+| `d_model` | 128 / 192 / 256 / 384 | 토큰 표현의 폭 |
+| `encoder_layers` / `decoder_layers` | 각각 1 / 2 / 3 / 4 | source 처리와 target 생성에 배분하는 깊이 |
+| `num_heads` | 2 / 4 / 8 | 특징 축을 나누는 방식 |
+| `ffn_ratio` | 2 / 4 | FFN 중간 차원의 크기 |
+| `norm_first` | False / True | Post-LN / Pre-LN |
 
-### 바꾸지 않는 값
-- pre-train 모델 구조
-- pre-train 학습 설정
-- tokenizer/BPE 설정
-- `VOCAB_SIZE`, `MAX_LEN`
-- batch size / gradient accumulation
-- 데이터셋 샘플링 규칙
-- 평가 방식
+`ARCH` 바로 아래의 `TRAIN_HP`에서 학습 설정도 조정합니다. 기본값은 시작점이며 최적값을 보장하지 않습니다.
 
----
+| 학습 설정 | 기본값 / 허용값 | 무엇을 바꾸나요? |
+| --- | --- | --- |
+| `optimizer` | AdamW / Adam | 가중치 갱신 방식 |
+| `learning_rate` | 기본 1e-3, 유한한 양수 | warmup 후 도달할 최대 학습률 |
+| `weight_decay` | 기본 0.01, 유한한 0 이상 값 | 가중치 정규화 강도 |
+| `dropout` | 기본 0.1, 0 이상 1 미만 | Embedding과 Transformer 내부 dropout 확률 |
 
-## 튜닝 하이퍼파라미터 설명
+Adam과 AdamW는 weight decay 적용 방식이 다릅니다. 같은 숫자가 같은 정규화 효과를 뜻하지 않으므로 optimizer를 바꿀 때 decay도 함께 검토하세요. Dropout은 학습에서만 적용하며 평가에서는 꺼집니다. Scheduler 형태, warmup, label smoothing, batch와 early stopping 규칙은 계속 공통입니다.
 
-### 1) `learning_rate`
+**변경 후 STEP5 셀과 STEP7만 다시 실행**하면 됩니다. 구조뿐 아니라 네 학습 설정 중 하나라도 바뀌면 새로운 run ID로 저장합니다. 데이터·tokenizer를 다시 만들 필요는 없으며, 데이터 패키지는 튜닝 값에 의존하지 않습니다. 결과표에는 각 실험의 optimizer·learning rate·weight decay·dropout도 표시합니다.
 
-#### 정의
-모델 파라미터를 한 번 업데이트할 때 얼마나 크게 움직일지 정하는 값입니다. Fine-tuning에서 가장 먼저 확인해야 하는 핵심 하이퍼파라미터입니다.
+허용값 조합이어도 **800만 파라미터를 넘으면 거부**합니다. 최대 길이 backward 검사에서 예약 메모리 12GiB 상한도 확인합니다. 기준 모델은 약 758만 파라미터입니다. `d_model=192`를 추가해 제한된 용량 안에서 폭과 깊이를 더 세밀하게 조합할 수 있습니다.
 
-#### 값을 올리면
-- IWSLT 데이터에 더 빠르게 적응할 수 있습니다.
-- 짧은 step 안에서 BLEU가 빨리 오를 수 있습니다.
-- 너무 크면 loss가 불안정해지거나 BLEU가 떨어질 수 있습니다.
+한 항목씩 바꿔 원인을 확인한 뒤, 비슷한 파라미터 수에서 넓고 얕은 모델·좁고 깊은 모델·Encoder/Decoder 비대칭 모델·FFN 비율을 비교하세요. head 수만 늘린다고 전체 projection 파라미터가 늘어나는 것은 아닙니다.
 
-#### 값을 내리면
-- 더 안정적으로 학습할 수 있습니다.
-- 너무 작으면 fine-tuning 효과가 거의 나타나지 않을 수 있습니다.
+## Early stopping과 최고 모델 저장
 
-#### 실험 감각
-처음에는 `5e-5`, `1e-4`, `2e-4`, `3e-4`처럼 learning rate만 바꿔 비교하는 것을 권장합니다.
+학습은 500 updates마다 validation을 평가합니다. Early stopping에는 **마지막으로 0.1점 초과 개선한 점수**를 기준으로 사용합니다. 예를 들어 기준이 20.00이면 20.05는 patience를 초기화하지 않지만, 이후 20.15에 도달하면 기준을 갱신하고 초기화합니다.
 
----
+- 1,500 updates 이전에는 기준 점수를 갱신하되 미개선 횟수는 세지 않습니다.
+- 1,500 updates 이후 3회 연속 개선이 없으면 종료합니다. 가장 이른 종료는 2,500 updates입니다.
+- 개선이 계속되면 최대 4,000 updates까지 학습합니다.
+- **최고 모델 저장에는 0.1점 조건을 적용하지 않습니다.** 20.00 → 20.05도 최고 점수라면 `best.pt`를 갱신합니다.
+- 조기 종료 시점의 모델이 아니라, 학습 전체에서 최고 validation BLEU를 기록한 모델로 최종 평가합니다.
 
-### 2) `lr_scheduler_type`
+이 규칙은 모든 참가자에게 공통입니다. 실제 updates는 모델별로 달라질 수 있으며, 공통 최대 예산과 중단 규칙 아래에서 비교합니다. 오래 학습할수록 구조 간 점수 차이가 커진다고 보장하지는 않습니다.
 
-#### 정의
-학습이 진행되면서 learning rate를 어떤 모양으로 변화시킬지 정하는 값입니다.
+## Quick / Full과 재개
 
-#### 선택지
-- `linear`: learning rate를 일정하게 줄입니다. 단순한 baseline으로 좋습니다.
-- `cosine`: learning rate를 부드럽게 줄입니다. 후반부 안정화에 도움이 될 수 있습니다.
-- `inverse_sqrt`: Transformer 계열에서 자주 쓰이는 방식입니다. warmup 이후 완만하게 줄어듭니다.
+`quick`은 별도 스케줄이 아닌 같은 학습의 첫 500 updates입니다. `full`로 바꾸면 저장된 500 update부터 이어가며, cosine의 전체 길이도 계속 4,000을 기준으로 유지합니다.
 
-#### 바꿨을 때 효과
-- 같은 learning rate라도 scheduler에 따라 초반/후반 학습 양상이 달라집니다.
-- `linear`는 단순하고 예측하기 쉽습니다.
-- `cosine`은 후반부가 비교적 부드러워 안정적인 경우가 있습니다.
-- `inverse_sqrt`는 warmup과 함께 쓸 때 Transformer 학습에 잘 맞는 경우가 있습니다.
+- `latest.pt`: 모델·optimizer·GradScaler·난수·진행 상태·early stopping 상태·TRAIN_HP
+- `best.pt`: validation 최고 모델과 선택 시점
+- `summary.json`: 점수·실행 시간·평가 이력·종료 사유
 
-#### 실험 감각
-먼저 좋은 `learning_rate`를 찾은 뒤, 그 값을 고정하고 scheduler를 비교하는 것이 좋습니다.
+재개할 때 구조·TRAIN_HP·환경과 평가 이력·저장된 patience가 일치하는지 검사합니다. 이전 결과를 평가하거나 제출할 때에는 현재 셀 값이 아닌 그 실험에 저장된 TRAIN_HP를 사용합니다. 이미 정상 종료한 `full`을 다시 실행하면 추가 학습하지 않고 결과를 불러옵니다. 정상 종료 사유는 `max_steps` 또는 `early_stopping`입니다. `quick_limit`은 제출 가능한 종료가 아닙니다.
 
----
+프로토콜은 `architecture-league-v3-tuning`, 저장 폴더는 `transformer_league_runs_v3`입니다. 이전 v1/v2 실험과 혼합하거나 그 checkpoint를 이어 학습하지 않습니다. Colab 런타임 종료 전 실험 폴더를 다운로드하세요. 임의의 신뢰할 수 없는 checkpoint를 불러오지 마세요.
 
-### 3) `warmup_steps`
+## 점수와 제출
 
-#### 정의
-학습 초반에 learning rate를 바로 크게 쓰지 않고, 작은 값에서 천천히 올리는 구간입니다.
+ResNet처럼 STEP7에서 valid/test loss·BLEU·chrF를 출력합니다. Quick 결과도 표시하되 공식 제출 대상과 구분합니다. 후보를 고르는 기준은 validation이며, 최종 모델의 test 결과를 확인합니다.
 
-#### 값을 올리면
-- 초반 학습이 안정적입니다.
-- 큰 learning rate를 사용할 때 폭주를 줄일 수 있습니다.
-- 너무 크면 실제로 충분히 학습하는 구간이 짧아질 수 있습니다.
+Loss는 PAD를 제외한 target 토큰당 cross entropy입니다. BLEU/chrF는 길이 제한으로 잘라낸 정답 대신 원문 reference를 사용합니다. Greedy 생성에는 정답 target을 전달하지 않습니다.
 
-#### 값을 내리면
-- 초반부터 빠르게 학습할 수 있습니다.
-- 짧은 `public_fast` 실험에서는 빠른 성능 상승에 유리할 수 있습니다.
-- 너무 작으면 초반 loss가 불안정해질 수 있습니다.
+```python
+SUBMISSION = export_submission(RESULT['run_id'])
+```
 
-#### 실험 감각
-`0`, `50`, `100`, `200` 정도를 비교해 볼 수 있습니다. learning rate가 클수록 warmup이 어느 정도 있는 편이 안정적입니다.
+**T4에서 full 정상 종료한 모델**만 제출할 수 있습니다. 최대 4,000 updates에 도달한 경우와 공통 early stopping으로 종료한 경우 모두 인정합니다. 종료 플래그만 믿지 않고 평가 이력으로 중단 규칙을 다시 확인합니다.
 
----
+ZIP에는 `best.pt`, `summary.json`, `tokenizer.json`, `data_manifest.json`, `checksums.json`이 포함됩니다. `DATA_PACKAGE`는 운영자가 공지한 값과 같아야 합니다. 파일 해시는 무결성 확인용이며 부정행위를 방지하는 서명은 아닙니다.
 
-### 4) `weight_decay`
+운영자는 공통 노트북과 [evaluate_submission.py](evaluate_submission.py)로 제출물을 재검증할 수 있습니다.
 
-#### 정의
-모델 가중치가 지나치게 커지는 것을 막는 regularization 값입니다. 과적합을 줄이는 역할을 합니다.
+```bash
+python evaluate_submission.py 제출폴더 --expected-package 운영자가_공지한_DATA_PACKAGE
+```
 
-#### 값을 올리면
-- 일반화 성능이 좋아질 수 있습니다.
-- validation/test BLEU가 안정적으로 나올 수 있습니다.
-- 너무 크면 모델이 충분히 학습하지 못할 수 있습니다.
+## 실행 시간과 검증 범위
 
-#### 값을 내리면
-- 학습 데이터에 더 빠르게 맞출 수 있습니다.
-- 과적합 위험이 커질 수 있습니다.
+기존 T4 측정은 1,200 updates 설정에서 수행했습니다. 이 수치를 새 4,000 updates·800만 상한 설정의 실측으로 해석하면 안 됩니다.
 
-#### 실험 감각
-처음에는 `0.0`과 `0.01`을 비교하는 정도면 충분합니다. learning rate나 scheduler보다 영향이 작게 보일 수 있습니다.
+새 구현은 로컬에서 조기 종료, 최고 모델 선택, 재개 가중치 일치, 정상 종료 후 재실행, 제출 검증을 확인했습니다. 새 규칙의 T4 실행 시간과 비슷한 크기 구조들 사이의 변별력은 별도 실측이 필요합니다. 목표 실행 시간 8~12분은 보장값이 아닙니다.
 
----
-
-### 5) `label_smoothing_factor`
-
-#### 정의
-정답 토큰 하나에만 100% 확신을 주지 않고, 정답 분포를 조금 부드럽게 만드는 값입니다.
-
-#### 값을 올리면
-- 모델이 과하게 확신하는 것을 줄일 수 있습니다.
-- 일반화에 도움이 될 수 있습니다.
-- 너무 크면 정답을 강하게 학습하지 못해 BLEU가 낮아질 수 있습니다.
-
-#### 값을 내리면
-- 정답에 더 강하게 맞추도록 학습합니다.
-- 짧은 step에서는 빠르게 학습되는 것처럼 보일 수 있습니다.
-- 과적합 위험이 커질 수 있습니다.
-
-#### 실험 감각
-`0.0`, `0.05`, `0.10`, `0.15` 정도를 비교해 볼 수 있습니다. 너무 높은 값은 학습을 둔하게 만들 수 있습니다.
-
----
-
-## 데이터셋 정리
-
-### Multi30k (de→en)
-- Stage A pre-train 데이터
-- 기본 독일어→영어 번역 능력을 학습하는 데 사용
-- 참가자가 직접 튜닝하는 대상은 아님
-
-### IWSLT 2017 (de→en)
-- Stage B fine-tuning 데이터
-- validation 점수와 final test 점수를 계산하는 데이터셋
-- 이번 리그전에서 실제로 성능을 높여야 하는 대상
-
----
-
-## 초보자 실험 가이드
-
-1. `public_fast`로 기본 `FT_HP`를 실행해 기준 점수를 기록합니다.
-2. `learning_rate`만 바꿔 3~4개 후보를 비교합니다.
-3. 좋은 learning rate를 고정하고 `lr_scheduler_type`을 비교합니다.
-4. `warmup_steps`를 조정합니다.
-5. 마지막으로 `weight_decay`, `label_smoothing_factor`를 조정합니다.
-6. 가장 좋은 조합 1~2개를 `public_full`로 다시 확인합니다.
-7. 최종 조합을 `final`로 실행해 test BLEU를 확인합니다.
-
----
-
-## 실험 기록표 예시
-
-| 실험 번호 | LEAGUE_MODE | learning_rate | scheduler | warmup | weight_decay | label_smoothing | valid BLEU | final BLEU | 메모 |
-|---|---|---:|---|---:|---:|---:|---:|---:|---|
-| 1 | public_fast | 1e-4 | linear | 50 | 0.0 | 0.10 |  |  | baseline |
-| 2 | public_fast | 2e-4 | linear | 50 | 0.0 | 0.10 |  |  | learning_rate 변경 |
-| 3 | public_full |  |  |  |  |  |  |  | 후보 검증 |
-| 4 | final |  |  |  |  |  |  |  | 최종 점수 |
-
----
-## 📌 제작 정보 & 출처
-
-- 제작: 가천대학교 인공지능 학술 동아리 **Aing (A.ing)**
-
-### 사용/참고 자료
-- Vaswani et al., **Attention Is All You Need**, NeurIPS 2017.
-- A.ing 내부 스터디 자료: *Attention 치트시트*, *Transformer CookBook*.
-- HuggingFace Transformers/Datasets 문서: Seq2Seq 학습(Trainer), Multi30k, IWSLT 로딩.
-- `tokenizers`(BPE), `sacrebleu`(BLEU 평가) 라이브러리.
+튜닝 추가 후에는 Adam/AdamW 생성, learning rate·weight decay·dropout의 실제 적용, 각 설정별 run ID 분리, 저장된 설정으로 평가·제출, Adam의 quick→full 재개 가중치 일치도 검증했습니다. 새 튜닝 버전의 T4 실행은 아직 수행하지 않았습니다.
