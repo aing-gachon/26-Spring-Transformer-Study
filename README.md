@@ -77,14 +77,14 @@ https://youtube.com/playlist?list=PL-PHXChFg8_tv0e8bNxYuh5VdWH0JO1sl&si=1K1-1GJu
 ├─ rules.md                                        # 출석·결석·공결 규칙
 ├─ Week1/
 │  ├─ transformer_paper_guide.md                    # 논문 가이드 R01~R13
-│  ├─ transformer_prerequisites.md                  # 시작 전 배경지식과 자기점검
-│  ├─ A.ing_Transformer_Cheat_sheet.md              # 개념 정리 CS§0~CS§7
+│  ├─ transformer_prerequisites.md                  # 시작 전 자연어처리 기초와 Transformer 이전 아키텍처 정리
+│  ├─ A.ing_Transformer_Cheat_sheet.md              # 개념 정리 (§0~§7)
 │  ├─ A.ing_Transformer_Questions.md                # 퀴즈 Q1~Q5
-│  └─ transformer_questions_sample_answer.md         # 해설 A1~A5
+│  └─ transformer_questions_sample_answer.md         # 모범 답안
 ├─ Week2/
-│  ├─ A.ing_Transformer_Cookbook.md                 # API·입출력 설명과 오류 진단 표
+│  ├─ A.ing_Transformer_Cookbook.md                 # torch API 사용법 + 에러 디버깅 표
 │  ├─ A.ing_Transformer_from_scratch_blank.ipynb    # 빈칸 N-1~N-36, Check, E01/E02
-│  └─ A.ing_Transformer_from_scratch_answer.ipynb   # 완성 모델과 동일한 핵심 검사
+│  └─ A.ing_Transformer_from_scratch_answer.ipynb   # 정답
 └─ Week3/
    └─ Aing_리그전_Transformer_Finetune.ipynb       # 튜닝 리그전 (FIXED/TUNE 구분)
 ```
