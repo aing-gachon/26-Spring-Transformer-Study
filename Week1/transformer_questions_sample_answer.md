@@ -114,7 +114,7 @@ C10은 `attention_logits_QK / sqrt(d_k)` 뒤 key 위치 축에 softmax를 적용
 ## 3) 왜 Transformer는 RNN과 CNN 대비 장기의존성(long-range dependency)에 유리하다고 주장하는가?  `[A3]`
 
 > 허브: [R01](transformer_paper_guide.md#r01) · [R11](transformer_paper_guide.md#r11)
-> 근거: [CS§0](A.ing_Transformer_Cheat_sheet.md#cs0) · 논문 Table 1의 세 비교 축 · E01/E02 및 Table 1
+> 근거: [CS§0](A.ing_Transformer_Cheat_sheet.md#cs0) · 논문 §4·Table 1의 세 비교 축
 
 ### (1) Maximum Path Length의 의미
 
