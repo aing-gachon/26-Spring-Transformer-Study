@@ -34,7 +34,7 @@ $$MultiHead(Q, K, V) = Concat(head_1,\dots,head_h)W^O$$
 각 head는 $Attention(QW_i^Q, KW_i^K, VW_i^V)$ 형태로 **서로 다른 선형변환(=서로 다른 관점)** 을 가진다.
 
 - (1) `[기본]` 단일 Attention과 Multi-Head Attention의 차이를 설명하시오.
-- (2) `[응용]` 여러 head의 서로 다른 가중합을 concat하는 이유를 설명하고, C7/C12에서 어떤 축을 나누고 합치는지 적으시오.
+- (2) `[응용]` Multi-Head Attention은 각 head의 attention 결과를 이어 붙인 뒤(concat), 출력 선형변환 $W^O$를 적용한다. **Concat과 출력 선형변환이 각각 어떤 역할을 하는지 구분하여 설명하시오.** 또한, 선형변환된 Q·K·V를 여러 head로 나누는 단계와 head별 결과를 다시 결합하는 단계에서 어떤 축을 나누고 합치는지 적으시오.
 - (3) `[심화]` Transformer는 각 head의 결과를 이어 붙인 뒤(concat), 출력 선형변환을 적용합니다. 이를 바꾸어 모든 head의 결과를 단순히 평균 낸다고 가정하겠습니다. 두 방법은 서로 다른 head가 찾아낸 정보를 보존하고 활용하는 방식에서 어떤 차이가 있습니까? Concat 뒤의 학습 가능한 선형변환이 단순 평균보다 다양한 결합을 표현할 수 있는 이유를 설명하시오.
 
 ---
@@ -49,7 +49,7 @@ $$MultiHead(Q, K, V) = Concat(head_1,\dots,head_h)W^O$$
 
 (1) `[기본]` $QK^\top$의 분산 관점에서 scaling이 필요한 이유를 설명하시오.
 
-(2) `[응용]` scaling을 하지 않을 경우 softmax의 saturation과 gradient에 어떤 문제가 발생하며, 이것이 학습 안정성과 어떤 관계가 있는지 설명하시오.
+(2) `[응용]` Scaling을 하지 않을 때 softmax가 포화될 수 있는 이유를 설명하시오. 이러한 포화가 attention 점수에 대한 기울기에 어떤 영향을 주며, 그 결과 Q·K를 만드는 가중치의 학습에 어떤 어려움이 생길 수 있는지 서술하시오.
 
 ---
 
