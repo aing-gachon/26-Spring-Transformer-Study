@@ -66,7 +66,7 @@ R 번호는 **논문 순서**라 학습 순서와 다릅니다. 주차별로는 
 
 | ID | 제목 |
 | --- | --- |
-| [R01](#r01) | 순차 계산을 줄이려는 이유 |
+| [R01](#r01) | 학습의 순차 계산을 줄이려는 이유 |
 
 ### §3–§3.1 Encoder–Decoder의 전체 구조
 
@@ -103,23 +103,26 @@ R 번호는 **논문 순서**라 학습 순서와 다릅니다. 주차별로는 
 ---
 
 <a id="r01"></a>
-## R01. 순차 계산을 줄이려는 이유
+## R01. 학습의 순차 계산을 줄이려는 이유
 
-- **논문 위치**: §1 2문단 + 마지막 문단 “In this work we propose the Transformer…”
+RNN은 학습할 때도 이전 위치의 은닉 상태가 계산되어야 다음 위치를 계산할 수 있습니다. Transformer는 이러한 위치별 순차 의존성을 줄여, 한 문장 안의 여러 위치를 병렬로 계산하고 학습 속도를 높이고자 합니다.
+
+- **논문 위치**: 핵심 근거는 §1 2문단과 마지막 문단. 학습과 생성의 차이는 §3 도입부·§3.1 Decoder 설명을 보충해서 읽습니다.
 - **읽기 전 질문**
-    - RNN 기반 번역 모델은 앞 단어의 처리가 끝나야 다음 단어를 처리합니다. 이 기다림을 줄이면 학습에서 무엇이 달라질까요?
-    - Encoder–Decoder라는 큰 구성을 유지하면서 내부의 문장 처리 방법만 바꿀 수 있을까요?
+    - 학습할 때 입력과 정답 문장을 모두 알고 있어도, RNN은 왜 이전 위치의 계산 결과를 기다려야 할까요?
+    - 이 기다림을 줄여 한 문장 안의 여러 위치를 동시에 계산할 수 있다면, 학습 속도에는 어떤 이점이 있을까요?
 - **원문 핵심**
-    - “In this work we propose the Transformer, a model architecture eschewing recurrence and instead relying entirely on an attention mechanism to draw global dependencies between input and output.”
-    - “The Transformer allows for significantly more parallelization and can reach a new state of the art in translation quality after being trained for as little as twelve hours on eight P100 GPUs.”
-    - 출처: [§1 Transformer 제안 문단](https://arxiv.org/html/1706.03762v7#S1.p4.1).
+    - “This inherently sequential nature precludes parallelization within training examples, which becomes critical at longer sequence lengths, as memory constraints limit batching across examples.”
+    - “The Transformer allows for significantly more parallelization…”
+    - 출처: [§1 RNN의 순차 계산 제약](https://arxiv.org/html/1706.03762v7#S1.p2) / [§1 Transformer 제안 문단](https://arxiv.org/html/1706.03762v7#S1.p4.1).
 - **확인 질문**
-    - 1) §1의 Transformer 제안 문단에서 저자는 recurrence(순환)를 쓰는 대신 어떤 방법에 기반한다고 설명합니까? 그 **방법의 이름**을 적으세요.
-    - 2) 같은 문단에서 이 구조가 학습의 병렬 처리에 어떤 이점을 준다고 주장합니까? 앞부분의 RNN 설명을 함께 읽고, 앞 위치의 계산 결과를 기다려야 한다는 제약과 연결하세요.
-    - 3) §1 마지막 문단에서 저자가 보고한 학습 시간은 얼마입니까? 번역 품질에 관한 주장도 찾아, 학습 속도만 개선했다고 요약해도 되는지 판단하세요.
+    - 1) §1 2문단에서 현재 위치의 은닉 상태를 계산하는 데 필요한 두 입력을 찾으세요. 그중 무엇 때문에 한 문장 안의 여러 위치를 동시에 계산하기 어려운가요?
+    - 2) 같은 문단의 '학습 예제 내부의 병렬화'와 '여러 예제를 배치로 묶는 것'은 어떻게 다른가요? 문장이 길어질 때 배치를 크게 만드는 방법에도 한계가 생기는 이유를 메모리 제약과 연결하세요.
+    - 3) §1 마지막 문단에서 Transformer가 순환을 대신해 사용하는 방법과 병렬 처리의 이점을 찾으세요. 저자가 보고한 학습 시간·GPU 수·번역 품질을 함께 적고, 순차 계산을 줄이려는 목적과 연결하세요.
 - **해석 노트**
-    - Transformer가 유지한 것은 Encoder–Decoder 구성이고, 바꾼 것은 내부의 문맥 처리 방식입니다. 전체 구조는 [R02](#r02)와 연결해서 읽습니다.
-    - 학습의 위치 병렬화와 번역문의 순차 생성은 구분합니다. 생성 시에는 앞서 만든 토큰을 기다리므로 “모든 계산이 동시에 끝난다”는 뜻이 아닙니다.
+    - **병렬화의 대상**: RNN도 서로 다른 문장들을 배치로 묶어 처리할 수 있습니다. 여기서 줄이려는 것은 각 문장 안에서 이전 위치의 은닉 상태를 기다리는 순차 의존성입니다.
+    - **Transformer의 학습**: 정답 번역문을 한 칸 옮겨 입력하고 causal mask로 미래 위치를 가리면, 여러 위치의 다음 토큰 예측을 한 번에 계산할 수 있습니다. 입력 이동과 마스크는 [R02](#r02)·[R07](#r07)에서 확인합니다.
+    - **Transformer의 실제 번역 생성**: 앞서 생성한 토큰을 다음 예측의 입력으로 사용하므로 토큰을 하나씩 순차적으로 생성합니다. 이 순차성은 남아 있지만, 학습 중 여러 위치를 병렬로 계산하는 이점은 유지됩니다.
 - **자료 좌표**: [CS§0](A.ing_Transformer_Cheat_sheet.md#cs0) · [Q3](A.ing_Transformer_Questions.md#q3) / [A3](transformer_questions_sample_answer.md#a3)
 
 ---
