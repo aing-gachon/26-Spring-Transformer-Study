@@ -58,7 +58,7 @@ A.ing 주니어 트랙 Transformer 세션은 Transformer에 대한 근본적인 
 | 0 | 준비 | [선수자료](Week1/transformer_prerequisites.md) | 자연어처리 기초와 Transformer이전 아키텍처에 대한 이해 |
 | 1 | 스터디 | 논문, [가이드](Week1/transformer_paper_guide.md), [치트시트](Week1/A.ing_Transformer_Cheat_sheet.md), [퀴즈](Week1/A.ing_Transformer_Questions.md) | R01~R11을 논문과 나란히 읽고 퀴즈로 확인 |
 | 2 | 구현 | [쿡북](Week2/A.ing_Transformer_Cookbook.md), [빈칸 노트북](Week2/A.ing_Transformer_from_scratch_blank.ipynb) | N-1~N-36 구현, Check로 동작 확인, E01/E02 비교 실험. Multi30k 학습은 선택 |
-| 3 | 실험 | [리그전 설명](Week3/A.ing_%EB%A6%AC%EA%B7%B8%EC%A0%84_Transformer_Explain.md), [리그전 노트북](Week3/Aing_%E1%84%85%E1%85%B5%E1%84%80%E1%85%B3%E1%84%8C%E1%85%A5%E1%86%AB_Transformer_Finetune.ipynb) | 하이퍼파라미터 튜닝 및 리그전  |
+| 3 | 실험 | [리그전 설명](Week3/A.ing_%EB%A6%AC%EA%B7%B8%EC%A0%84_Transformer_Explain.md), [리그전 노트북](Week3/Aing_%EB%A6%AC%EA%B7%B8%EC%A0%84_Transformer_Finetune.ipynb) | 하이퍼파라미터 튜닝 및 리그전  |
 | 4 | 정리 | 실험 데이터 기록, [가이드 R11~R13](Week1/transformer_paper_guide.md#r11) | 1등 팀의 전략 발표 및 로그 분석 |
 
 ## Paper Link
